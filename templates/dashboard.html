@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Team Task Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Inter", "ui-sans-serif", "system-ui"]
+          },
+          colors: {
+            ink: "#14213d",
+            ocean: "#0f766e",
+            cobalt: "#2563eb",
+            ember: "#dc2626",
+            line: "#d9e4ec"
+          },
+          boxShadow: {
+            premium: "0 28px 80px rgba(20, 33, 61, 0.14)",
+            card: "0 16px 44px rgba(20, 33, 61, 0.08)"
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: "Inter", system-ui, sans-serif;
+    }
+
+    .chart-frame {
+      position: relative;
+      min-height: 260px;
+      height: clamp(260px, 34vw, 360px);
+    }
+
+    .mobile-menu {
+      transform: translateX(-100%);
+      transition: transform 220ms ease;
+    }
+
+    .mobile-menu.is-open {
+      transform: translateX(0);
+    }
+
+    .skeleton-shimmer {
+      position: relative;
+      overflow: hidden;
+      background: rgba(226, 232, 240, 0.75);
+    }
+
+    .skeleton-shimmer::after {
+      animation: shimmer 1.1s infinite;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+      content: "";
+      inset: 0;
+      position: absolute;
+      transform: translateX(-100%);
+    }
+
+    @keyframes shimmer {
+      100% {
+        transform: translateX(100%);
+      }
+    }
+
+    body.dashboard-loading #dashboardShell {
+      opacity: 0;
+    }
+
+    body:not(.dashboard-loading) #skeletonOverlay {
+      display: none;
+    }
+  </style>
+</head>
+<body class="dashboard-loading min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 text-ink antialiased">
+  {% if auth_view %}
+  <main class="flex min-h-screen items-center justify-center px-4 py-10">
+    <section class="w-full max-w-md rounded-2xl border border-white/70 bg-white/80 p-8 shadow-premium backdrop-blur-md">
+      <div class="mb-8">
+        <div class="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-ink text-sm font-extrabold text-white shadow-card">TT</div>
+        <p class="text-sm font-bold uppercase tracking-wide text-ocean">Team Task Manager</p>
+        <h1 class="mt-2 text-3xl font-extrabold tracking-tight">
+          {{ "Register" if auth_view == "signup" else "Sign in" }}
+        </h1>
+      </div>
+
+      {% if flash %}
+      <div class="mb-5 rounded-2xl border px-4 py-3 text-sm font-semibold {% if flash.category == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+        {{ flash.message }}
+      </div>
+      {% endif %}
+
+      <form method="post" action="{{ '/signup' if auth_view == 'signup' else '/login' }}" class="space-y-4">
+        {% if auth_view == "signup" %}
+        <label class="block">
+          <span class="text-sm font-bold text-slate-700">Full name</span>
+          <input name="name" required minlength="2" class="mt-1 w-full rounded-2xl border border-line bg-white px-4 py-3 outline-none ring-ocean focus:ring-2">
+        </label>
+        {% endif %}
+        <label class="block">
+          <span class="text-sm font-bold text-slate-700">Email</span>
+          <input name="email" type="email" required class="mt-1 w-full rounded-2xl border border-line bg-white px-4 py-3 outline-none ring-ocean focus:ring-2">
+        </label>
+        <label class="block">
+          <span class="text-sm font-bold text-slate-700">Password</span>
+          <input name="password" type="password" required minlength="{{ 8 if auth_view == 'signup' else 1 }}" class="mt-1 w-full rounded-2xl border border-line bg-white px-4 py-3 outline-none ring-ocean focus:ring-2">
+        </label>
+        <button class="w-full rounded-2xl bg-ink px-4 py-3 font-extrabold text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-2xl">
+          {{ "Create account" if auth_view == "signup" else "Sign in" }}
+        </button>
+      </form>
+
+      <p class="mt-6 text-center text-sm text-slate-600">
+        {% if auth_view == "signup" %}
+        Already have an account? <a href="/login" class="font-extrabold text-ocean">Sign in</a>
+        {% else %}
+        New here? <a href="/register" class="font-extrabold text-ocean">Register your account</a>
+        {% endif %}
+      </p>
+    </section>
+  </main>
+  {% else %}
+  <div id="mobileOverlay" class="fixed inset-0 z-40 hidden bg-slate-950/40 backdrop-blur-sm lg:hidden" onclick="closeMobileMenu()"></div>
+  <div id="skeletonOverlay" class="fixed inset-0 z-30 bg-gradient-to-br from-slate-50 to-blue-50 p-4 lg:p-6">
+    <div class="flex min-h-screen gap-6">
+      <div class="hidden h-[calc(100vh-3rem)] w-72 rounded-2xl border border-white/70 bg-white/70 p-5 shadow-premium backdrop-blur-md lg:block">
+        <div class="skeleton-shimmer h-12 w-40 rounded-2xl"></div>
+        <div class="mt-9 space-y-3">
+          <div class="skeleton-shimmer h-10 rounded-2xl"></div>
+          <div class="skeleton-shimmer h-10 rounded-2xl"></div>
+          <div class="skeleton-shimmer h-10 rounded-2xl"></div>
+        </div>
+      </div>
+      <div class="flex-1 space-y-5 pt-16 lg:pt-0">
+        <div class="skeleton-shimmer h-36 rounded-2xl"></div>
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div class="skeleton-shimmer h-32 rounded-2xl"></div>
+          <div class="skeleton-shimmer h-32 rounded-2xl"></div>
+          <div class="skeleton-shimmer h-32 rounded-2xl"></div>
+        </div>
+        <div class="skeleton-shimmer h-80 rounded-2xl"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dashboardShell">
+  <aside id="mobileSidebar" class="mobile-menu fixed inset-y-0 left-0 z-50 flex h-full w-80 max-w-[86vw] flex-col border-r border-white/70 bg-white/85 p-5 shadow-premium backdrop-blur-md lg:hidden">
+    <div class="shrink-0">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-ink text-sm font-extrabold text-white">TT</div>
+          <div>
+            <p class="text-xs font-extrabold uppercase tracking-wide text-ocean">Workspace</p>
+            <h1 class="text-lg font-extrabold tracking-tight">Team Tasks</h1>
+          </div>
+        </div>
+        <button onclick="closeMobileMenu()" class="rounded-2xl p-2 text-slate-500 hover:bg-white hover:text-ink" aria-label="Close menu">
+          <i data-lucide="x" class="h-5 w-5"></i>
+        </button>
+      </div>
+
+      <nav class="mt-8 space-y-2">
+        <a class="flex items-center gap-3 rounded-2xl bg-white/85 px-4 py-3 text-sm font-extrabold text-ink shadow-sm" href="/dashboard" onclick="closeMobileMenu()"><i data-lucide="layout-dashboard" class="h-4 w-4"></i>Dashboard</a>
+        <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-white/70" href="#analytics" onclick="closeMobileMenu()"><i data-lucide="chart-no-axes-combined" class="h-4 w-4"></i>Analytics</a>
+        <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-white/70" href="#tasks" onclick="closeMobileMenu()"><i data-lucide="list-checks" class="h-4 w-4"></i>Tasks</a>
+        <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-white/70" href="#projects" onclick="closeMobileMenu()"><i data-lucide="folder-kanban" class="h-4 w-4"></i>Projects</a>
+      </nav>
+    </div>
+
+    <div class="mt-8 shrink-0 space-y-4 border-t border-white/80 pt-6">
+      <div>
+        <p class="text-xs font-extrabold uppercase tracking-wide text-slate-500">Signed in as</p>
+        <p class="js-user-name mt-2 font-extrabold">{{ user.name }}</p>
+        <span class="mt-2 inline-flex rounded-full bg-ink px-3 py-1 text-xs font-extrabold text-white">{{ user.role }}</span>
+        <form method="post" action="/logout" class="mt-4">
+          <button class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:text-red-800">
+            <i data-lucide="log-out" class="h-4 w-4"></i>
+            <span>Sign Out</span>
+          </button>
+        </form>
+        <button onclick="openModal('profileModal')" class="mt-3 flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-ocean">
+          <i data-lucide="user-pen" class="h-4 w-4"></i>
+          <span>Edit Profile</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="min-h-screen lg:flex lg:gap-6 lg:p-6">
+    <aside class="sticky top-6 hidden h-[calc(100vh-3rem)] w-72 shrink-0 flex-col rounded-2xl border border-white/70 bg-white/70 p-5 shadow-premium backdrop-blur-md lg:flex">
+      <div class="shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-ink text-sm font-extrabold text-white">TT</div>
+          <div>
+            <p class="text-xs font-extrabold uppercase tracking-wide text-ocean">Workspace</p>
+            <h1 class="text-lg font-extrabold tracking-tight">Team Tasks</h1>
+          </div>
+        </div>
+
+        <nav class="mt-9 space-y-2">
+          <a class="flex items-center gap-3 rounded-2xl bg-white/85 px-4 py-3 text-sm font-extrabold text-ink shadow-sm" href="/dashboard"><i data-lucide="layout-dashboard" class="h-4 w-4"></i>Dashboard</a>
+          <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-white/70" href="#analytics"><i data-lucide="chart-no-axes-combined" class="h-4 w-4"></i>Analytics</a>
+          <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-white/70" href="#tasks"><i data-lucide="list-checks" class="h-4 w-4"></i>Tasks</a>
+          <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-white/70" href="#projects"><i data-lucide="folder-kanban" class="h-4 w-4"></i>Projects</a>
+        </nav>
+      </div>
+
+      <div class="mt-9 shrink-0 space-y-4 border-t border-white/80 pt-6">
+        <div>
+          <p class="text-xs font-extrabold uppercase tracking-wide text-slate-500">Signed in as</p>
+          <p class="js-user-name mt-2 font-extrabold">{{ user.name }}</p>
+          <span class="mt-2 inline-flex rounded-full bg-ink px-3 py-1 text-xs font-extrabold text-white">{{ user.role }}</span>
+          <form method="post" action="/logout" class="mt-2">
+            <button class="flex items-center gap-1 text-xs text-red-500 hover:underline">
+              <i data-lucide="log-out" class="h-3 w-3"></i>
+              <span>Sign Out</span>
+            </button>
+          </form>
+          <button onclick="openModal('profileModal')" class="mt-3 flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-ocean">
+            <i data-lucide="user-pen" class="h-4 w-4"></i>
+            <span>Edit Profile</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="min-w-0 flex-1 px-4 pb-10 pt-20 sm:px-6 lg:px-0 lg:pt-0">
+      <header class="fixed inset-x-0 top-0 z-30 border-b border-white/70 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-md lg:hidden">
+        <div class="flex items-center justify-between">
+          <button onclick="openMobileMenu()" class="rounded-2xl p-2 text-slate-700 hover:bg-white" aria-label="Open menu">
+            <i data-lucide="menu" class="h-5 w-5"></i>
+          </button>
+          <div class="text-center">
+            <p class="text-xs font-extrabold uppercase tracking-wide text-ocean">Workspace</p>
+            <h1 class="text-sm font-extrabold">Team Tasks</h1>
+          </div>
+          <button class="rounded-2xl p-2 text-slate-700 hover:bg-white" aria-label="Notifications">
+            <i data-lucide="bell" class="h-5 w-5"></i>
+          </button>
+        </div>
+      </header>
+
+      <section class="rounded-2xl border border-white/70 bg-white/70 px-5 py-5 shadow-card backdrop-blur-md sm:px-6 lg:px-7">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p class="text-xs font-extrabold uppercase tracking-wide text-ocean">{{ user.role }} Dashboard</p>
+            <h2 class="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">Work intelligence</h2>
+            <p class="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-600">A live view of delivery health, workload, and assigned execution.</p>
+          </div>
+          {% if user.role == "ADMIN" %}
+          <div class="flex flex-wrap gap-3">
+            <button onclick="openModal('projectModal')" class="inline-flex items-center gap-2 rounded-2xl border border-line bg-white px-4 py-3 text-sm font-extrabold shadow-sm transition hover:-translate-y-1 hover:shadow-2xl">
+              <i data-lucide="folder-plus" class="h-4 w-4"></i>
+              New project
+            </button>
+            <button onclick="openModal('taskModal')" class="inline-flex items-center gap-2 rounded-2xl bg-ink px-4 py-3 text-sm font-extrabold text-white shadow-card transition hover:-translate-y-1 hover:shadow-2xl">
+              <i data-lucide="plus" class="h-4 w-4"></i>
+              Assign task
+            </button>
+          </div>
+          {% endif %}
+        </div>
+      </section>
+
+      {% if flash %}
+      <div class="mt-5 rounded-2xl border px-4 py-3 text-sm font-bold {% if flash.category == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+        {{ flash.message }}
+      </div>
+      {% endif %}
+
+      <section class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <article class="rounded-2xl border border-white/70 bg-white/75 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-extrabold text-slate-500">Total Tasks</p>
+            <span class="rounded-2xl bg-blue-50 p-2 text-cobalt"><i data-lucide="clipboard-list" class="h-4 w-4"></i></span>
+          </div>
+          <p class="mt-5 text-4xl font-extrabold">{{ total_tasks }}</p>
+        </article>
+        <article class="rounded-2xl border border-white/70 bg-white/75 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-extrabold text-slate-500">Completed</p>
+            <span class="rounded-2xl bg-emerald-50 p-2 text-emerald-600"><i data-lucide="circle-check" class="h-4 w-4"></i></span>
+          </div>
+          <p class="mt-5 text-4xl font-extrabold">{{ completed_percent }}%</p>
+        </article>
+        <article class="rounded-2xl border border-white/70 bg-white/75 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl md:col-span-2 lg:col-span-1">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-extrabold text-slate-500">Overdue</p>
+            <span class="rounded-2xl bg-red-50 p-2 text-ember"><i data-lucide="triangle-alert" class="h-4 w-4"></i></span>
+          </div>
+          <p class="mt-5 text-4xl font-extrabold text-ember">{{ overdue_count }}</p>
+        </article>
+        {% if user.role == "MEMBER" %}
+        <article class="rounded-2xl border border-white/70 bg-white/75 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl md:col-span-2 lg:col-span-3">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p class="text-sm font-extrabold text-slate-500">Personal Stats</p>
+              <h3 class="mt-2 text-xl font-extrabold">Your assigned workload</h3>
+            </div>
+            <div class="grid grid-cols-2 gap-3 sm:min-w-80">
+              <div class="rounded-2xl bg-green-50 p-4">
+                <p class="text-xs font-extrabold uppercase tracking-wide text-green-700">My Completed Tasks</p>
+                <p class="mt-2 text-3xl font-extrabold text-green-700">{{ personal_stats.completed }}</p>
+              </div>
+              <div class="rounded-2xl bg-orange-50 p-4">
+                <p class="text-xs font-extrabold uppercase tracking-wide text-orange-700">My Pending Tasks</p>
+                <p class="mt-2 text-3xl font-extrabold text-orange-700">{{ personal_stats.pending }}</p>
+              </div>
+            </div>
+          </div>
+        </article>
+        {% endif %}
+      </section>
+
+      <section class="mt-5 rounded-2xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 class="text-lg font-extrabold">Completion trend</h3>
+            <p class="mt-1 text-sm font-medium text-slate-500">Completed work over the last 7 days</p>
+          </div>
+          <span class="inline-flex w-fit items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-extrabold text-cobalt">
+            <i data-lucide="trending-up" class="h-4 w-4"></i>
+            Live trend
+          </span>
+        </div>
+        <div class="chart-frame mt-4"><canvas id="completionTrendChart"></canvas></div>
+      </section>
+
+      {% if user.role == "ADMIN" %}
+      <section class="mt-5 rounded-2xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 class="text-lg font-extrabold">Workload Chart</h3>
+            <p class="mt-1 text-sm font-medium text-slate-500">Open and completed tasks by team member</p>
+          </div>
+          <span class="inline-flex w-fit items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-extrabold text-ocean">
+            <i data-lucide="users" class="h-4 w-4"></i>
+            Admin view
+          </span>
+        </div>
+        <div class="chart-frame mt-4"><canvas id="workloadChart"></canvas></div>
+      </section>
+      {% endif %}
+
+      <section id="analytics" class="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-5">
+        <article class="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl xl:col-span-2">
+          <h3 class="text-lg font-extrabold">Task status</h3>
+          <p class="mt-1 text-sm font-medium text-slate-500">Distribution across the work queue</p>
+          <div class="chart-frame mt-4"><canvas id="statusChart"></canvas></div>
+        </article>
+
+        <article class="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl xl:col-span-3">
+          <h3 class="text-lg font-extrabold">Project load</h3>
+          <p class="mt-1 text-sm font-medium text-slate-500">Task volume across visible projects</p>
+          <div class="chart-frame mt-4"><canvas id="projectChart"></canvas></div>
+        </article>
+      </section>
+
+      <section class="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-4">
+        <article class="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl">
+          <h3 class="text-lg font-extrabold">Delivery health</h3>
+          <p class="mt-1 text-sm font-medium text-slate-500">Completed, overdue, and remaining work</p>
+          <div class="chart-frame mt-4"><canvas id="healthChart"></canvas></div>
+        </article>
+
+        <section id="tasks" class="xl:col-span-2">
+          <div class="mb-4 space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xl font-extrabold">Priority Tasks</h3>
+              <span id="taskCountLabel" class="text-sm font-bold text-slate-500">{{ tasks|length }} visible</span>
+            </div>
+            <div class="grid grid-cols-1 gap-3 rounded-2xl border border-white/70 bg-white/70 p-3 shadow-sm backdrop-blur-md md:grid-cols-3">
+              <label class="relative md:col-span-2">
+                <i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"></i>
+                <input id="taskSearch" type="search" placeholder="Search tasks by name" class="w-full rounded-2xl border border-line bg-white py-3 pl-10 pr-4 text-sm font-medium outline-none ring-ocean focus:ring-2">
+              </label>
+              <select id="statusFilter" class="rounded-2xl border border-line bg-white px-4 py-3 text-sm font-bold text-slate-600 outline-none ring-ocean focus:ring-2">
+                <option value="ALL">All statuses</option>
+                <option value="TO_DO">To Do</option>
+                <option value="DOING">Doing</option>
+                <option value="DONE">Done</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 gap-4">
+            {% for task in tasks %}
+            {% set is_overdue = task.due_date and task.due_date < now and task.status != "DONE" %}
+            <article data-task-card data-task-title="{{ task.title|lower }}" data-task-status="{{ task.status }}" class="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h4 class="text-lg font-extrabold">{{ task.title }}</h4>
+                  <p class="mt-1 text-sm font-bold text-slate-500">{{ task.project.name }} &middot; {{ task.assignee.name }}</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  {% if task.priority == "HIGH" %}
+                  <span class="rounded-full bg-red-100 px-3 py-1 text-xs font-extrabold text-red-700">High</span>
+                  {% elif task.priority == "MEDIUM" %}
+                  <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-extrabold text-amber-700">Medium</span>
+                  {% else %}
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-extrabold text-slate-700">Low</span>
+                  {% endif %}
+                  {% if is_overdue %}
+                  <span class="rounded-full bg-red-100 px-3 py-1 text-xs font-extrabold text-red-700">Overdue</span>
+                  {% endif %}
+                  {% if task.status == "DONE" %}
+                  <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-extrabold text-emerald-700">Done</span>
+                  {% elif task.status == "DOING" %}
+                  <span class="rounded-full bg-blue-100 px-3 py-1 text-xs font-extrabold text-blue-700">In Progress</span>
+                  {% else %}
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-extrabold text-slate-700">To Do</span>
+                  {% endif %}
+                </div>
+              </div>
+              {% if task.description %}
+              <p class="mt-4 text-sm leading-6 text-slate-600">{{ task.description }}</p>
+              {% endif %}
+              <div class="mt-5 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm font-bold text-slate-500">Due {{ task.due_date.strftime("%b %d, %Y") if task.due_date else "Unscheduled" }}</p>
+                <div class="flex flex-wrap gap-2">
+                  <form method="post" action="/tasks/{{ task.id }}/status" class="flex gap-2">
+                    <select name="task_status" class="rounded-2xl border border-line bg-white px-3 py-2 text-sm font-bold">
+                      <option value="TO_DO" {% if task.status == "TO_DO" %}selected{% endif %}>To Do</option>
+                      <option value="DOING" {% if task.status == "DOING" %}selected{% endif %}>Doing</option>
+                      <option value="DONE" {% if task.status == "DONE" %}selected{% endif %}>Done</option>
+                    </select>
+                    <button class="rounded-2xl bg-ink px-4 py-2 text-sm font-extrabold text-white">Update</button>
+                  </form>
+                  {% if user.role == "ADMIN" %}
+                  <button onclick="openModal('taskEditModal{{ task.id }}')" class="rounded-2xl border border-line bg-white px-4 py-2 text-sm font-extrabold text-slate-700">Edit</button>
+                  <form method="post" action="/tasks/{{ task.id }}/delete">
+                    <button class="rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-extrabold text-red-600">Delete</button>
+                  </form>
+                  {% endif %}
+                </div>
+              </div>
+            </article>
+            {% else %}
+            <div class="rounded-2xl border border-dashed border-line bg-white/75 p-10 text-center font-bold text-slate-500">
+              No tasks yet.
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+
+        <aside class="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-extrabold">Activity Feed</h3>
+              <p class="mt-1 text-sm font-medium text-slate-500">Recent task updates</p>
+            </div>
+            <span class="rounded-2xl bg-ocean/10 p-2 text-ocean"><i data-lucide="rss" class="h-4 w-4"></i></span>
+          </div>
+          <div class="mt-5 space-y-4">
+            {% for activity in activities %}
+            <div class="border-l-2 border-ocean/30 pl-4">
+              <p class="text-sm font-extrabold text-ink">{{ activity.action }}</p>
+              <p class="mt-1 text-sm leading-5 text-slate-600">{{ activity.actor.name }} {{ activity.detail }}</p>
+              <p class="mt-1 text-xs font-bold text-slate-400">{{ activity.created_at.strftime("%b %d, %I:%M %p") }}</p>
+            </div>
+            {% else %}
+            <div class="rounded-2xl border border-dashed border-line bg-white/70 p-5 text-sm font-bold text-slate-500">
+              No activity yet.
+            </div>
+            {% endfor %}
+          </div>
+        </aside>
+      </section>
+
+      <section id="projects" class="mt-8 pb-10">
+        <h3 class="mb-4 text-xl font-extrabold">Projects</h3>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {% for project in projects %}
+          <article class="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur-md transition hover:-translate-y-1 hover:shadow-2xl">
+            <h4 class="font-extrabold">{{ project.name }}</h4>
+            <p class="mt-2 min-h-12 text-sm leading-6 text-slate-600">{{ project.description or "No description provided." }}</p>
+            <div class="mt-4 flex items-center justify-between gap-3">
+              <p class="text-sm font-extrabold text-slate-500">{{ project_task_counts.get(project.id, 0) }} tasks</p>
+              {% if user.role == "ADMIN" %}
+              <div class="flex gap-2">
+                <button onclick="openModal('projectEditModal{{ project.id }}')" class="rounded-2xl border border-line bg-white px-3 py-2 text-sm font-extrabold text-slate-700">Edit</button>
+                <form method="post" action="/projects/{{ project.id }}/delete">
+                  <button class="rounded-2xl border border-red-200 bg-white px-3 py-2 text-sm font-extrabold text-red-600">Delete</button>
+                </form>
+              </div>
+              {% endif %}
+            </div>
+          </article>
+          {% else %}
+          <div class="rounded-2xl border border-dashed border-line bg-white/75 p-8 text-center font-bold text-slate-500 md:col-span-2 lg:col-span-3">
+            No projects yet.
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="profileModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+    <form method="POST" action="/update-profile" class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-premium">
+      <div class="mb-5 flex items-center justify-between">
+        <div>
+          <h3 class="text-xl font-extrabold">Edit profile</h3>
+          <p class="mt-1 text-sm font-medium text-slate-500">Keep your workspace identity current.</p>
+        </div>
+        <button type="button" onclick="closeModal('profileModal')" class="rounded-2xl px-2 py-1 text-slate-500">Close</button>
+      </div>
+      <label class="block">
+        <span class="text-sm font-extrabold">Full name</span>
+        <input name="name" required value="{{ user.name }}" class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+      </label>
+      <label class="mt-4 block">
+        <span class="text-sm font-extrabold">Email</span>
+        <input name="email" type="email" required value="{{ user.email }}" class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+      </label>
+      <button class="mt-5 rounded-2xl bg-ink px-4 py-3 font-extrabold text-white">Save profile</button>
+    </form>
+  </div>
+
+  {% if user.role == "ADMIN" %}
+  <div id="projectModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+    <form method="post" action="/projects" class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-premium">
+      <div class="mb-5 flex items-center justify-between">
+        <h3 class="text-xl font-extrabold">New project</h3>
+        <button type="button" onclick="closeModal('projectModal')" class="rounded-2xl px-2 py-1 text-slate-500">Close</button>
+      </div>
+      <label class="block">
+        <span class="text-sm font-extrabold">Name</span>
+        <input name="name" required class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+      </label>
+      <label class="mt-4 block">
+        <span class="text-sm font-extrabold">Description</span>
+        <textarea name="description" rows="4" class="mt-1 w-full rounded-2xl border border-line px-4 py-3"></textarea>
+      </label>
+      <button class="mt-5 rounded-2xl bg-ink px-4 py-3 font-extrabold text-white">Create project</button>
+    </form>
+  </div>
+
+  {% for project in projects %}
+  <div id="projectEditModal{{ project.id }}" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+    <form method="post" action="/projects/{{ project.id }}/update" class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-premium">
+      <div class="mb-5 flex items-center justify-between">
+        <h3 class="text-xl font-extrabold">Edit project</h3>
+        <button type="button" onclick="closeModal('projectEditModal{{ project.id }}')" class="rounded-2xl px-2 py-1 text-slate-500">Close</button>
+      </div>
+      <label class="block">
+        <span class="text-sm font-extrabold">Name</span>
+        <input name="name" required value="{{ project.name }}" class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+      </label>
+      <label class="mt-4 block">
+        <span class="text-sm font-extrabold">Description</span>
+        <textarea name="description" rows="4" class="mt-1 w-full rounded-2xl border border-line px-4 py-3">{{ project.description or "" }}</textarea>
+      </label>
+      <button class="mt-5 rounded-2xl bg-ink px-4 py-3 font-extrabold text-white">Save changes</button>
+    </form>
+  </div>
+  {% endfor %}
+
+  {% for task in tasks %}
+  <div id="taskEditModal{{ task.id }}" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+    <form method="post" action="/tasks/{{ task.id }}/update" class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-premium">
+      <div class="mb-5 flex items-center justify-between">
+        <h3 class="text-xl font-extrabold">Edit task</h3>
+        <button type="button" onclick="closeModal('taskEditModal{{ task.id }}')" class="rounded-2xl px-2 py-1 text-slate-500">Close</button>
+      </div>
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label class="block md:col-span-2">
+          <span class="text-sm font-extrabold">Title</span>
+          <input name="title" required value="{{ task.title }}" class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+        </label>
+        <label class="block">
+          <span class="text-sm font-extrabold">Project</span>
+          <select name="project_id" required class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+            {% for project in projects %}
+            <option value="{{ project.id }}" {% if task.project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm font-extrabold">Assignee</span>
+          <select name="assignee_id" required class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+            {% for member in users %}
+            <option value="{{ member.id }}" {% if task.assignee_id == member.id %}selected{% endif %}>{{ member.name }} &middot; {{ member.role }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm font-extrabold">Priority</span>
+          <select name="priority" required class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+            <option value="HIGH" {% if task.priority == "HIGH" %}selected{% endif %}>High</option>
+            <option value="MEDIUM" {% if task.priority == "MEDIUM" %}selected{% endif %}>Medium</option>
+            <option value="LOW" {% if task.priority == "LOW" %}selected{% endif %}>Low</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm font-extrabold">Due date</span>
+          <input name="due_date" type="date" value="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}" class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+        </label>
+        <label class="block md:col-span-2">
+          <span class="text-sm font-extrabold">Description</span>
+          <textarea name="description" rows="4" class="mt-1 w-full rounded-2xl border border-line px-4 py-3">{{ task.description or "" }}</textarea>
+        </label>
+      </div>
+      <button class="mt-5 rounded-2xl bg-ink px-4 py-3 font-extrabold text-white">Save task</button>
+    </form>
+  </div>
+  {% endfor %}
+
+  <div id="taskModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+    <form method="post" action="/tasks" class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-premium">
+      <div class="mb-5 flex items-center justify-between">
+        <h3 class="text-xl font-extrabold">Assign task</h3>
+        <button type="button" onclick="closeModal('taskModal')" class="rounded-2xl px-2 py-1 text-slate-500">Close</button>
+      </div>
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label class="block md:col-span-2">
+          <span class="text-sm font-extrabold">Title</span>
+          <input name="title" required class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+        </label>
+        <label class="block">
+          <span class="text-sm font-extrabold">Project</span>
+          <select name="project_id" required class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+            {% for project in projects %}
+            <option value="{{ project.id }}">{{ project.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm font-extrabold">Assignee</span>
+          <select name="assignee_id" required class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+            {% for member in users %}
+            <option value="{{ member.id }}">{{ member.name }} &middot; {{ member.role }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm font-extrabold">Priority</span>
+          <select name="priority" required class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+            <option value="HIGH">High</option>
+            <option value="MEDIUM" selected>Medium</option>
+            <option value="LOW">Low</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm font-extrabold">Due date</span>
+          <input name="due_date" type="date" class="mt-1 w-full rounded-2xl border border-line px-4 py-3">
+        </label>
+        <label class="block md:col-span-2">
+          <span class="text-sm font-extrabold">Description</span>
+          <textarea name="description" rows="4" class="mt-1 w-full rounded-2xl border border-line px-4 py-3"></textarea>
+        </label>
+      </div>
+      <button class="mt-5 rounded-2xl bg-ink px-4 py-3 font-extrabold text-white">Assign task</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <script>
+    let chartData = {{ chart_data|tojson }};
+
+    function openMobileMenu() {
+      document.getElementById("mobileSidebar").classList.add("is-open");
+      document.getElementById("mobileOverlay").classList.remove("hidden");
+    }
+
+    function closeMobileMenu() {
+      document.getElementById("mobileSidebar").classList.remove("is-open");
+      document.getElementById("mobileOverlay").classList.add("hidden");
+    }
+
+    function openModal(id) {
+      document.getElementById(id).classList.remove("hidden");
+      document.getElementById(id).classList.add("flex");
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add("hidden");
+      document.getElementById(id).classList.remove("flex");
+    }
+
+    function filterTasks() {
+      const searchInput = document.getElementById("taskSearch");
+      const statusFilter = document.getElementById("statusFilter");
+      const countLabel = document.getElementById("taskCountLabel");
+      if (!searchInput || !statusFilter || !countLabel) return;
+
+      const query = searchInput.value.trim().toLowerCase();
+      const status = statusFilter.value;
+      let visibleCount = 0;
+
+      document.querySelectorAll("[data-task-card]").forEach((card) => {
+        const matchesSearch = card.dataset.taskTitle.includes(query);
+        const matchesStatus = status === "ALL" || card.dataset.taskStatus === status;
+        const isVisible = matchesSearch && matchesStatus;
+        card.classList.toggle("hidden", !isVisible);
+        if (isVisible) visibleCount += 1;
+      });
+
+      countLabel.textContent = `${visibleCount} visible`;
+    }
+
+    document.getElementById("taskSearch")?.addEventListener("input", filterTasks);
+    document.getElementById("statusFilter")?.addEventListener("change", filterTasks);
+
+    function renderDashboardCharts(data) {
+      Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+      Chart.defaults.color = "#475569";
+
+      const completionCanvas = document.getElementById("completionTrendChart");
+      if (completionCanvas) {
+        new Chart(completionCanvas, {
+          type: "line",
+          data: {
+            labels: data.trend_labels,
+            datasets: [{
+              label: "Completed tasks",
+              data: data.trend_values,
+              borderColor: "#2563eb",
+              backgroundColor: "rgba(37, 99, 235, 0.12)",
+              borderWidth: 3,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: "#2563eb",
+              pointBorderWidth: 3,
+              pointRadius: 4,
+              tension: 0.35,
+              fill: true,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { weight: 700 } } },
+              y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: "#e2e8f0" } },
+            },
+            plugins: { legend: { display: false } },
+          },
+        });
+      }
+
+      const statusCanvas = document.getElementById("statusChart");
+      if (statusCanvas) {
+        new Chart(statusCanvas, {
+          type: "doughnut",
+          data: {
+            labels: data.status_labels,
+            datasets: [{
+              data: data.status_values,
+              backgroundColor: ["#cbd5e1", "#2563eb", "#10b981"],
+              borderColor: "#ffffff",
+              borderWidth: 4,
+              hoverOffset: 6,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: "68%",
+            plugins: {
+              legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8, padding: 18 } },
+            },
+          },
+        });
+      }
+
+      const projectCanvas = document.getElementById("projectChart");
+      if (projectCanvas) {
+        new Chart(projectCanvas, {
+          type: "bar",
+          data: {
+            labels: data.project_labels.length ? data.project_labels : ["No projects"],
+            datasets: [{
+              label: "Tasks",
+              data: data.project_values.length ? data.project_values : [0],
+              backgroundColor: "#0f766e",
+              borderRadius: 10,
+              maxBarThickness: 46,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { weight: 700 } } },
+              y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: "#e2e8f0" } },
+            },
+            plugins: { legend: { display: false } },
+          },
+        });
+      }
+
+      const healthCanvas = document.getElementById("healthChart");
+      if (healthCanvas) {
+        new Chart(healthCanvas, {
+          type: "polarArea",
+          data: {
+            labels: data.health_labels,
+            datasets: [{
+              data: data.health_values,
+              backgroundColor: ["rgba(16, 185, 129, 0.72)", "rgba(220, 38, 38, 0.72)", "rgba(37, 99, 235, 0.72)"],
+              borderColor: "#ffffff",
+              borderWidth: 2,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { r: { ticks: { display: false }, grid: { color: "#e2e8f0" } } },
+            plugins: {
+              legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8, padding: 14 } },
+            },
+          },
+        });
+      }
+
+      const workloadCanvas = document.getElementById("workloadChart");
+      if (workloadCanvas && data.workload_labels && data.workload_labels.length) {
+        new Chart(workloadCanvas, {
+          type: "bar",
+          data: {
+            labels: data.workload_labels,
+            datasets: [{
+              label: "Tasks per member",
+              data: data.workload_values,
+              backgroundColor: "#2563eb",
+              borderRadius: 10,
+              maxBarThickness: 38,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { weight: 700 } } },
+              y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: "#e2e8f0" } },
+            },
+            plugins: { legend: { display: false } },
+          },
+        });
+      }
+    }
+
+    function hideSkeletonLoader() {
+      document.body.classList.remove('dashboard-loading');
+    }
+
+    async function loadDashboardData() {
+      try {
+        const response = await fetch('/dashboard-data', { credentials: 'same-origin' });
+        if (response.ok) {
+          const payload = await response.json();
+          if (payload && payload.chart_data) {
+            chartData = payload.chart_data;
+          }
+        }
+      } catch (error) {
+        console.warn('Dashboard data fetch failed:', error);
+      } finally {
+        renderDashboardCharts(chartData);
+        hideSkeletonLoader();
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', loadDashboardData);
+    setTimeout(hideSkeletonLoader, 3000);
+    lucide.createIcons();
+  </script>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign In | Team Task Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 font-['Inter'] text-slate-900">
+  <main class="flex min-h-screen items-center justify-center px-4 py-10">
+    <section class="w-full max-w-md rounded-2xl border border-white/70 bg-white/85 p-8 shadow-2xl shadow-slate-200/70 backdrop-blur-md">
+      <div class="mb-8">
+        <div class="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-sm font-extrabold text-white">TT</div>
+        <p class="text-sm font-bold uppercase tracking-wide text-teal-700">Team Task Manager</p>
+        <h1 class="mt-2 text-3xl font-extrabold tracking-tight">Sign in</h1>
+      </div>
+
+      {% if flash %}
+      <div class="mb-5 rounded-2xl border px-4 py-3 text-sm font-semibold {% if flash.category == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+        {{ flash.message }}
+      </div>
+      {% endif %}
+
+      <form method="post" action="/login" class="space-y-4">
+        <label class="block">
+          <span class="text-sm font-bold text-slate-700">Email</span>
+          <input name="email" type="email" required class="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none ring-teal-700 focus:ring-2">
+        </label>
+        <label class="block">
+          <span class="text-sm font-bold text-slate-700">Password</span>
+          <input name="password" type="password" required class="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none ring-teal-700 focus:ring-2">
+        </label>
+        <button class="w-full rounded-2xl bg-slate-900 px-4 py-3 font-extrabold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-2xl">Sign in</button>
+      </form>
+
+      <p class="mt-6 text-center text-sm text-slate-600">
+        New here? <a href="/register" class="font-extrabold text-teal-700">Register your account</a>
+      </p>
+    </section>
+  </main>
+</body>
+</html>
