@@ -716,3 +716,322 @@ def delete_task(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/api/profile")
+def api_update_profile(
+    name: str = Form(...),
+    email: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    data = ProfileSchema(name=name, email=email)
+    existing_user = (
+        db.query(User)
+        .filter(User.email == data.email, User.id != user.id)
+        .first()
+    )
+    if existing_user:
+        return JSONResponse(
+            {"ok": False, "message": "That email is already used by another account."},
+            status_code=400,
+        )
+
+    user.name = data.name
+    user.email = data.email
+    db.commit()
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": "Profile updated.",
+            "name": user.name,
+            "email": user.email,
+        }
+    )
+
+
+@app.get("/api/tasks")
+def api_get_tasks(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    task_query = db.query(Task).options(
+        joinedload(Task.project),
+        joinedload(Task.assignee),
+    )
+    
+    if user.role == "MEMBER":
+        task_query = task_query.filter(Task.assignee_id == user.id)
+    
+    tasks = task_query.order_by(
+        Task.due_date.is_(None),
+        Task.due_date.asc(),
+        Task.id.desc(),
+    ).all()
+    
+    return JSONResponse(
+        {
+            "ok": True,
+            "tasks": [
+                {
+                    "id": task.id,
+                    "title": task.title,
+                    "description": task.description,
+                    "status": task.status,
+                    "priority": task.priority,
+                    "due_date": task.due_date.isoformat() if task.due_date else None,
+                    "project_id": task.project_id,
+                    "project_name": task.project.name,
+                    "assignee_id": task.assignee_id,
+                    "assignee_name": task.assignee.name,
+                }
+                for task in tasks
+            ],
+        }
+    )
+
+
+@app.post("/api/tasks")
+def api_create_task(
+    title: str = Form(...),
+    description: Optional[str] = Form(None),
+    project_id: int = Form(...),
+    assignee_id: int = Form(...),
+    priority: str = Form("MEDIUM"),
+    due_date: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    normalized_priority = priority.strip().upper()
+    data = TaskSchema(
+        title=title,
+        description=description,
+        project_id=project_id,
+        assignee_id=assignee_id,
+        priority=normalized_priority,
+        due_date=parse_due_date(due_date),
+    )
+    if not db.query(Project).filter(Project.id == data.project_id).first():
+        return JSONResponse(
+            {"ok": False, "message": "Project not found."},
+            status_code=404,
+        )
+    if not db.query(User).filter(User.id == data.assignee_id).first():
+        return JSONResponse(
+            {"ok": False, "message": "Assignee not found."},
+            status_code=404,
+        )
+
+    task = Task(**data.model_dump())
+    db.add(task)
+    db.flush()
+    log_activity(
+        db,
+        user,
+        "Task assigned",
+        f"assigned {task.title} as {task.priority.title()} priority",
+        task,
+    )
+    db.commit()
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": "Task assigned.",
+            "task_id": task.id,
+        },
+        status_code=201,
+    )
+
+
+@app.post("/api/tasks/{task_id}/status")
+def api_update_task_status(
+    task_id: int,
+    task_status: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    data = StatusSchema(status=task_status)
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return JSONResponse(
+            {"ok": False, "message": "Task not found."},
+            status_code=404,
+        )
+
+    if user.role != "ADMIN" and task.assignee_id != user.id:
+        return JSONResponse(
+            {"ok": False, "message": "You can only update tasks assigned to you."},
+            status_code=403,
+        )
+
+    old_status = task.status
+    task.status = data.status
+    log_activity(
+        db,
+        user,
+        "Status updated",
+        f"changed {task.title} from {old_status.replace('_', ' ').title()} to {task.status.replace('_', ' ').title()}",
+        task,
+    )
+    db.commit()
+    return JSONResponse(
+        {"ok": True, "message": "Task status updated."}
+    )
+
+
+@app.post("/api/tasks/{task_id}/delete")
+def api_delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return JSONResponse(
+            {"ok": False, "message": "Task not found."},
+            status_code=404,
+        )
+    
+    task_title = task.title
+    db.query(ActivityLog).filter(ActivityLog.task_id == task.id).update(
+        {ActivityLog.task_id: None}
+    )
+    log_activity(
+        db,
+        user,
+        "Task deleted",
+        f"deleted {task_title}",
+    )
+    db.delete(task)
+    db.commit()
+    return JSONResponse(
+        {"ok": True, "message": "Task deleted."}
+    )
+
+
+@app.get("/api/projects")
+def api_get_projects(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    project_query = db.query(Project).options(joinedload(Project.tasks))
+    
+    if user.role == "MEMBER":
+        project_query = project_query.join(Task).filter(Task.assignee_id == user.id)
+    
+    projects = project_query.distinct().order_by(Project.created_at.desc()).all()
+    
+    return JSONResponse(
+        {
+            "ok": True,
+            "projects": [
+                {
+                    "id": project.id,
+                    "name": project.name,
+                    "description": project.description,
+                    "task_count": len(project.tasks),
+                }
+                for project in projects
+            ],
+        }
+    )
+
+
+@app.post("/api/projects")
+def api_create_project(
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    data = ProjectSchema(name=name, description=description)
+    db.add(Project(name=data.name, description=data.description, owner_id=user.id))
+    db.commit()
+    return JSONResponse(
+        {"ok": True, "message": "Project created."},
+        status_code=201,
+    )
+
+
+@app.post("/api/projects/{project_id}")
+def api_update_project(
+    project_id: int,
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    data = ProjectSchema(name=name, description=description)
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return JSONResponse(
+            {"ok": False, "message": "Project not found."},
+            status_code=404,
+        )
+
+    project.name = data.name
+    project.description = data.description
+    db.commit()
+    return JSONResponse(
+        {"ok": True, "message": "Project updated."}
+    )
+
+
+@app.post("/api/projects/{project_id}/delete")
+def api_delete_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return JSONResponse(
+            {"ok": False, "message": "Project not found."},
+            status_code=404,
+        )
+    
+    db.delete(project)
+    db.commit()
+    return JSONResponse(
+        {"ok": True, "message": "Project deleted."}
+    )
+
+
+@app.get("/api/stats")
+def api_get_stats(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    now = datetime.utcnow()
+    task_query = db.query(Task).options(
+        joinedload(Task.project),
+        joinedload(Task.assignee),
+    )
+    
+    if user.role == "MEMBER":
+        task_query = task_query.filter(Task.assignee_id == user.id)
+    
+    tasks = task_query.all()
+    
+    total_tasks = len(tasks)
+    completed_tasks = len([task for task in tasks if task.status == "DONE"])
+    doing_tasks = len([task for task in tasks if task.status == "DOING"])
+    todo_tasks = len([task for task in tasks if task.status == "TO_DO"])
+    overdue_tasks = len(
+        [task for task in tasks if task.due_date and task.due_date < now and task.status != "DONE"]
+    )
+    
+    return JSONResponse(
+        {
+            "ok": True,
+            "stats": {
+                "total": total_tasks,
+                "completed": completed_tasks,
+                "doing": doing_tasks,
+                "todo": todo_tasks,
+                "overdue": overdue_tasks,
+                "completion_percent": round((completed_tasks / total_tasks) * 100) if total_tasks else 0,
+            },
+        }
+    )
+
