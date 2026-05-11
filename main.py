@@ -5,7 +5,7 @@ from typing import Optional
 
 import bcrypt
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr, Field
@@ -138,6 +138,11 @@ def require_admin(user: User = Depends(require_user)) -> User:
 
 def redirect(path: str) -> RedirectResponse:
     return RedirectResponse(path, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def parse_due_date(value: Optional[str]) -> Optional[datetime]:
